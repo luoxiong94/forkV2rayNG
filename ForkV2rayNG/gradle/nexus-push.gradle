@@ -1,0 +1,146 @@
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+//apply plugin: 'kotlin-android'
+//apply plugin: 'kotlin'
+// 下面这种方式不行
+//plugins {
+////    id 'java-library'
+//    id 'maven-publish'
+//    id 'signing'
+//}
+@groovy.transform.Field static int env_localhost = 1
+@groovy.transform.Field static int env_yuansu = 2
+@groovy.transform.Field static int env_wang_laoshi = 3
+@groovy.transform.Field static int current_env = -1
+
+def init() {
+    current_env = env_wang_laoshi // env_localhost  env_yuansu
+}
+
+init()
+
+def isReleaseBuild() {
+    return is_Release
+}
+// http://nexus_ip:8081/repository/maven-public
+static def getReleaseRepositoryUrl() {
+    switch (current_env){
+        case env_yuansu:
+            return "http://172.16.137.204:8081/repository/maven-public/" // 元素-阿里云
+            break;
+        case env_wang_laoshi:
+            return "http://47.100.166.206:8082/repository/maven-public/"  // 王老师
+            break;
+    }
+    //
+    return "http://localhost:8081/repository/maven-public/" // 本地
+}
+
+static def getSnapshotRepositoryUrl() {
+    switch (current_env){
+        case env_yuansu:
+            return "http://172.16.137.204:8081/repository/maven-snapshots/"// 元素-阿里云
+            break;
+        case env_wang_laoshi:
+            return "http://47.100.166.206:8082/repository/maven-snapshots/" // 王老师
+            break;
+    }
+    //
+     return "http://localhost:8081/repository/maven-snapshots/" // 本地
+
+}
+
+static def getRepositoryUsername() {
+    return "admin" // 本地 or 王老师 or 公司
+}
+
+static def getRepositoryPassword() {
+    switch (current_env){
+        case env_yuansu:
+            return "wErb16g6Cg4PbPJz"// 元素-阿里云
+            break;
+        case env_wang_laoshi:
+            return "888-ruhr-"// 王老师
+            break;
+    }
+    return "888-ruhr-"
+}
+//   1 base 库想发布到nexus，如果base 库的维度是 id1，那么base库引用的base2 base3他们库的维度也必须是id1
+//   2 A  B C 库想引用 base库，flavorDimensions 一定不能设置 "id1"，不能和base库之前上传的维度一样，切记切记切记。
+//   3 App和远程base库维度一样，App就会引用不到远程的base库
+afterEvaluate { project ->
+//    println("当前.nexus-push.333..")
+    //添加android相关配置, 是有用的，但是这里设置来不及了
+//    It is too late to modify flavorDimensions
+//    It has already been read to configure this project.
+//    Consider either moving this call to be during evaluation,
+//    or using the variant API.
+//    project.android{
+//        flavorDimensions project.name // path=:lib:base
+//    }
+    publishing {
+//        println("当前.nexus-push.4444..")
+        publications {
+            // maven  release
+            release(MavenPublication) {
+                // Applies the component for the release build variant. -》应用发布版本变体的组件
+                /*
+                 *  1 切记：如果base库基于 devRelease 发布的，如果其他库引用base库，但是没有dev变体的话
+                 *  ，会拉不到base库
+                 *  2 components后面的变体必须存在才能编译通过。
+                 *  3 必须添加 from components.* ，否则生成不了aar
+                 */
+                ////  from android.sourceSets.main.java.getSrcDirs()
+//                from components.onlineRelease release
+                from components.release
+                groupId = "com.lx.ys_aliyun" // Config.applicationId
+                artifactId = ARTIFACT_ID
+                version = VERSION_NAME
+
+            }
+        }
+        repositories {
+            maven {
+                // name = "luoxiong"
+                allowInsecureProtocol true
+                // nexus3没有开启匿名用户访问的话，添加认证信息
+                credentials {
+                    username = getRepositoryUsername()
+                    password = getRepositoryPassword()
+                }
+                url = isReleaseBuild() ? getReleaseRepositoryUrl() : getSnapshotRepositoryUrl()
+            }
+        }
+    }
+    signing {
+//        required { isReleaseBuild() && gradle.taskGraph.hasTask("publishing") }
+        required {  gradle.taskGraph.hasTask("publishing") }
+        sign configurations.archives
+    }
+
+
+//    artifacts {
+    // 打开下面2个属性就报错
+//        archives androidSourcesJar
+//        archives androidJavadocsJar
+//    }
+//     artifacts {
+//        // 打开下面2个属性就报错
+//         archives androidSourcesJar
+//        // withSourcesJar()
+//     }
+
+
+    // 不报错，但没用。google 搜 kotlin aar to maven
+//   task {
+//        androidSourcesJar(type: Jar) {
+//            classifier = 'sources' from android.sourceSets.main.java.srcDirs
+//        }
+//        artifacts {
+//            archives androidSourcesJar
+//        }
+//   }
+
+}
+
+
